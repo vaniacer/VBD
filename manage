@@ -1,0 +1,79 @@
+#!/bin/bash
+
+cmdlist=(
+   #Menu ID    #Description                        #Command        #Options                #Confirm
+    "Info"		"Show VM info."						"showvminfo"	""					    ""
+    "Start"		"Start VM."							"startvm"		"--type headless"	    ""
+    "Stop"		"Send poweroff signal."				"controlvm"		"acpipowerbutton"	    ""
+    "Export"	"Export VM to vm_export.ova file"	"export"		"-o vm_export.ova"	    ""
+    "Clone"     "Clone this VM"                     "clonevm"       "--mode all --register" ""
+    "Kill"		"Shutdown VM now."					"controlvm"     "poweroff"			    "true"
+    "Delete"	"Delete VM."						"unregistervm"  "--delete"			    "true"
+); N=${#cmdlist[@]}; C=5 #Number of columns
+
+#Add colors
+. ~/SCR/color
+
+bye(){ clear; ls --color=auto; exit 0; }; trap bye INT
+
+#Create list for commands menu
+for ((i=0; i<$N; i+=$C)); do cmdmenu+=("${cmdlist[@]:$i:2}"); done
+
+#Get VMNames and statuses
+OI=$IFS; IFS=$'\n'; vms=($(VBoxManage list vms | sed 's|^\"||g; s|\".*$||g')); IFS=$OI
+for vm in "${vms[@]}"; do
+             #VMName   #VMStatus
+    list+=( "$vm"     "$(VBoxManage showvminfo "$vm" | grep -i state | sed 's/State: *//')" )
+done
+
+#Run selected command on selected VM
+run_command(){
+    clear; [ "$msg" ] && echo -e "$msg"
+
+    case $command in
+         "Clone") enter_new_name; cloning="--name $new_vm_name";;
+    esac
+
+    #VBox      #Command              #VMName   #Options
+    VBoxManage ${cmdlist[$(($i+2))]} "$target" ${cmdlist[$(($i+3))]} $cloning
+    cloning=
+}
+
+#Confirmation dialog#
+confirmation(){
+    dialog --default-button "no" --aspect 100 --colors \
+           --yesno "Realy? Are you sure you want to \Zb\Z1$command\ZB\Z0 $target VM?" 0 0
+
+    case $? in
+         0) msg="${BLD}${RED}I warned you :)${DEF}"; run_command;; #Answered YES
+         1) select_vm; return 1;;                                  #Answered NO
+    esac
+}
+
+#First dialog to select VM
+select_vm(){
+    target=$(dialog --output-fd 1 --ok-label "SELECT" --cancel-label "EXIT" --menu "Select VM:" 0 0 0 "${list[@]}")
+    [ -z "$target" ] && bye #EXIT button selected
+    edit_vm
+}
+
+enter_new_name(){ new_vm_name=$(dialog --output-fd 1 --cancel-label "BACK" --inputbox "Enter new VM name:" 0 0 "$vm"); }
+
+#Second dialog to select command
+function edit_vm {
+	command=$(dialog --colors --output-fd 1 --ok-label "RUN" --cancel-label "BACK" --aspect 100 \
+					 --menu "Select command to run on VM \"\Zb\Z4${target}\ZB\Z0\":" 0 0 0 "${cmdmenu[@]}")
+
+	for ((i=0; i<$N; i+=$C)); do
+        confirm=${cmdlist[$(($i+4))]};
+        case        $command:$confirm in
+            "${cmdlist[$i]}":"true" ) confirmation; break;; #Confirmation  needed
+            "${cmdlist[$i]}":""     ) run_command;;         #Run  selected command
+                          "":""     ) select_vm  ;;         #BACK button   selected
+        esac
+    done
+}
+
+select_vm #Let's get it started!)
+
+exit 0

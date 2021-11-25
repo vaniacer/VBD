@@ -1,0 +1,138 @@
+#!/bin/bash
+
+function bye { clear; ls --color=auto; exit 0; }; trap bye INT
+
+#Color
+. ~/SCR/color
+
+#Messages
+errmess1="$RED\nInvalid option \"$1\".${DEF}\nEnter \"--help\" or \"-h\" for help.\n"
+errmess2="$RED\nOptions needed.${DEF}\nEnter \"--help\" or \"-h\" for help.\n${DEF}"
+first_menu="Create VM with the following parameters.\nYou can edit selected parameter by enter \"EDIT\" menu."
+helpmess="${BLD}VirtualBox VM cli creation helper.${DEF}
+In the end of the creation process VM starts and boot from ISO.
+Connect to VM via any RDP client on port 3389 to install OS.
+For example rdesktop -${GRN}${BLD}=${N}---${RED}> ${YLW}rdesktop localhost:3389${DEF}
+
+${BLD}Usage:${DEF}
+    ./$(basename $0) -n test_vm -t Linux_64 -m 1024 -d 30000 -i ~/iso/ubuntu.iso [--list|-l] [--help|-h] [--conf|-f]
+
+${BLD}Available options are:${DEF}
+    --name  (-n) - VM name.
+    --type  (-t) - OS type. Linux, Linux_64, Windows7, Windows7_64 ...
+    --list  (-l) - List vbox' availible OS types.
+    --msize (-m) - VM memory size in Mb.
+    --dsize (-d) - VM disk size in Mb.
+    --conf  (-f) - Get config(options) from file.
+    --iso   (-i) - ISO image.
+    --net   (-e) - Network adapter for bridged networking.
+    --help  (-h) - This message.
+    --import(-p) - Import VM from .ova image.
+
+${BLD}Confile example:${DEF}
+
+name=test_vm
+type=Linux_64
+msize=1024
+dsize=30000
+iso=~/iso/ubuntu.iso
+net=eth0
+"
+
+#Get opts
+until [ -z "$1" ]; do case $1 in
+
+    --name   | -n) name="$2"  ;;
+    --dsize  | -d) dsize="$2" ;;
+    --msize  | -m) msize="$2" ;;
+    --type   | -t) type="$2"  ;;
+    --iso    | -i) iso="$2"   ;;
+    --net    | -e) net="$2"   ;;
+    --conf   | -f) source "$2";;
+    --import | -p) VBoxManage import "$2" ; exit 0;;
+    --list   | -l) VBoxManage list ostypes; exit 0;;
+    --help   | -h) echo -e "$helpmess"    ; exit 0;;
+		        *) echo -e "$errmess1"    ; exit 1;;
+
+esac; shift 2; done
+
+values=("$name" "" "$dsize" "" "$msize" "" "$type" "" "$iso" "" "$net" "")
+
+#Get VB OS types
+for ot in $(VBoxManage list ostypes | sed '/Family/d; /64 bit/d; s/^.\{13\}//g; s/ /_S_/g'); do
+
+    ot="$(sed "s/_S_/ /g" <<< "$ot")"; ostype+=("$ot")
+
+done
+
+function create_vm {
+
+    for ((i=0; i<${#values[@]}; i+=2)); do
+        key=(${optlist[$i]})
+        case ${values[$i]} in "") echo -e "\n$RED\nParameter ${BLD}\"${key[0]}\"${N}${RED} not set.\n${DEF}"; exit 1;; esac
+    done
+
+    disk_name="VirtualBox VMs/${values[0]}/${values[0]}.vmdk"
+
+    VBoxManage createvm --name "${values[0]}" --ostype ${values[6]} --register
+    VBoxManage createhd --size "${values[2]}" --variant Standard --format VMDK --filename "$disk_name"
+    VBoxManage modifyvm        "${values[0]}" --memory ${values[4]} --acpi on --pae on --boot1 dvd --nic1 bridged --bridgeadapter1 "${values[10]}"
+    VBoxManage storagectl      "${values[0]}" --name "IDE Controller" --add ide --controller PIIX4
+    VBoxManage storageattach   "${values[0]}" --storagectl "IDE Controller" --port 0 --device 0 --type hdd --medium "$disk_name"
+    VBoxManage storageattach   "${values[0]}" --storagectl "IDE Controller" --port 0 --device 1 --type dvddrive --medium "${values[8]}"
+    VBoxManage modifyvm        "${values[0]}" --vrde on
+    printf     --              "${GRN}Run this command to connect to VM:\n    ${DEF}${BLD}rdesktop -a 16 -N ${netif:-localhost}:3389${DEF}\n"
+    VBoxHeadless --startvm     "${values[0]}"
+    VBoxManage storageattach   "${values[0]}" --storagectl "IDE Controller" --port 0 --device 1 --type dvddrive --medium none
+
+    exit 0
+}
+
+function first_dialog {
+
+    optlist=(
+        #Parameter#              #Description#
+        "Name   = ${values[0]}"  "VM name."
+        "Disk   = ${values[2]}"  "VM disk size in Mb."
+        "Memory = ${values[4]}"  "VM memory size in Mb."
+        "Type   = ${values[6]}"  "OS type. List OS types with -l option."
+        "ISO    = ${values[8]}"  "Path to ISO image."
+        "Net    = ${values[10]}" "Network adapter for bridged networking."
+    )
+
+    option=($( dialog --output-fd 1 --extra-button --extra-label "EDIT" \
+     --default-button "extra" --ok-label "CREATE" --cancel-label "EXIT" \
+     --menu "$first_menu" 0 0 0 "${optlist[@]}" ))
+
+    case $option:$? in
+              "":*) bye;;
+               *:0) create_vm;;
+               *:3) second_dialog;;
+    esac
+}
+
+function second_dialog {
+    local  newvalue
+    local  value=${option[2]}
+    local  parameter=${option[0]}
+    case "$parameter" in
+
+        "ISO" ) newvalue=$(dialog --output-fd 1 --cancel-label "BACK" --fselect ~/ 20 100);;
+        "Type") newvalue=$(dialog --output-fd 1 --cancel-label "BACK" --menu "Select OS type" 0 0 0 "${ostype[@]}");;
+        "Net" ) newvalue=$(dialog --output-fd 1 --cancel-label "BACK" --menu "Select network adapter" 0 0 0 $(ip -br a | awk '{print $1, $3}'))
+                   netif=$(ip -br a | awk "/$newvalue/"'{print $3}'); netif=${netif%/*};;
+        *     ) newvalue=$(dialog --output-fd 1 --cancel-label "BACK" --inputbox "Edit parameter \n\"$parameter\":" 0 0 "$value");;
+
+    esac
+
+    for ((i=0; i<${#values[@]}; i+=2)); do
+        key=(${optlist[$i]})
+        case ${key[0]} in "$parameter") [ "$newvalue" ] && values[$i]="$newvalue";; esac
+    done
+
+    first_dialog
+}
+
+first_dialog
+
+exit 0
