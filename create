@@ -85,7 +85,7 @@ function create_vm {
     VBoxHeadless --startvm     "${values[0]}"
     VBoxManage storageattach   "${values[0]}" --storagectl "IDE Controller" --port 0 --device 1 --type dvddrive --medium none
 
-    exit 0
+    second_dialog
 }
 
 function first_dialog {

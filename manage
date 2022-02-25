@@ -72,6 +72,8 @@ function edit_vm {
                           "":""     ) select_vm  ;;         #BACK button   selected
         esac
     done
+
+    select_vm
 }
 
 select_vm #Let's get it started!)
