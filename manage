@@ -2,13 +2,13 @@
 
 cmdlist=(
    #Menu ID    #Description                        #Command        #Options                #Confirm
-    "Info"		"Show VM info."						"showvminfo"	""					    ""
-    "Start"		"Start VM."							"startvm"		"--type headless"	    ""
-    "Stop"		"Send poweroff signal."				"controlvm"		"acpipowerbutton"	    ""
-    "Export"	"Export VM to vm_export.ova file"	"export"		"-o vm_export.ova"	    ""
+    "Info"      "Show VM info."                     "showvminfo"    ""                      ""
+    "Start"     "Start VM."                         "startvm"       "--type headless"       ""
+    "Stop"      "Send poweroff signal."             "controlvm"     "acpipowerbutton"       ""
+    "Export"    "Export VM to vm_export.ova file"   "export"        "-o vm_export.ova"      ""
     "Clone"     "Clone this VM"                     "clonevm"       "--mode all --register" ""
-    "Kill"		"Shutdown VM now."					"controlvm"     "poweroff"			    "true"
-    "Delete"	"Delete VM."						"unregistervm"  "--delete"			    "true"
+    "Kill"      "Shutdown VM now."                  "controlvm"     "poweroff"              "true"
+    "Delete"    "Delete VM."                        "unregistervm"  "--delete"              "true"
 ); N=${#cmdlist[@]}; C=5 #Number of columns
 
 #Add colors
@@ -20,11 +20,16 @@ bye(){ clear; ls --color=auto; exit 0; }; trap bye INT
 for ((i=0; i<$N; i+=$C)); do cmdmenu+=("${cmdlist[@]:$i:2}"); done
 
 #Get VMNames and statuses
-OI=$IFS; IFS=$'\n'; vms=($(VBoxManage list vms | sed 's|^\"||g; s|\".*$||g')); IFS=$OI
-for vm in "${vms[@]}"; do
-             #VMName   #VMStatus
-    list+=( "$vm"     "$(VBoxManage showvminfo "$vm" | grep -i state | sed 's/State: *//')" )
-done
+vm_list_renew(){
+    list=()
+    local vms=($(VBoxManage list vms | sed 's|^\"||g; s|\".*$||g'))
+    local vm data=$(
+        for vm in "${vms[@]}"; do
+            ( echo "$vm $(VBoxManage showvminfo "$vm" | grep -i state | sed 's/State: *//')" ) &
+        done
+    );   local vm_name vm_state
+    while read vm_name vm_state; do list+=( "$vm_name" "$vm_state"); done < <(sort <<< "$data")
+}
 
 #Run selected command on selected VM
 run_command(){
@@ -73,9 +78,9 @@ function edit_vm {
         esac
     done
 
+    vm_list_renew
     select_vm
 }
 
+vm_list_renew
 select_vm #Let's get it started!)
-
-exit 0
