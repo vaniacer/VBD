@@ -15,6 +15,12 @@ cmdlist=(
 . ~/SCR/color
 
 bye(){ clear; ls --color=auto; exit 0; }; trap bye INT
+pause(){
+    local  mess=${1:-'press any key to continue'}
+    printf "\n$COF$BLD$mess\n"
+    read   -srn1
+    printf "\n$DEF$CON"
+}
 
 #Create list for commands menu
 for ((i=0; i<$N; i+=$C)); do cmdmenu+=("${cmdlist[@]:$i:2}"); done
@@ -73,7 +79,7 @@ function edit_vm {
         confirm=${cmdlist[$(($i+4))]};
         case        $command:$confirm in
             "${cmdlist[$i]}":"true" ) confirmation; break;; #Confirmation  needed
-            "${cmdlist[$i]}":""     ) run_command;;         #Run  selected command
+            "${cmdlist[$i]}":""     ) run_command ; pause;; #Run  selected command
                           "":""     ) select_vm  ;;         #BACK button   selected
         esac
     done
