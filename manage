@@ -75,12 +75,12 @@ function edit_vm {
 	command=$(dialog --colors --output-fd 1 --ok-label "RUN" --cancel-label "BACK" --aspect 100 \
 					 --menu "Select command to run on VM \"\Zb\Z4${target}\ZB\Z0\":" 0 0 0 "${cmdmenu[@]}")
 
-	for ((i=0; i<$N; i+=$C)); do
+    for ((i=0; i<$N; i+=$C)); do
         confirm=${cmdlist[$(($i+4))]};
         case        $command:$confirm in
-            "${cmdlist[$i]}":"true" ) confirmation; break;; #Confirmation  needed
-            "${cmdlist[$i]}":""     ) run_command ; pause;; #Run  selected command
-                          "":""     ) select_vm  ;;         #BACK button   selected
+            "${cmdlist[$i]}":"true" ) confirmation; pause; break;; #Confirmation needed
+            "${cmdlist[$i]}":""     ) run_command ; pause       ;; #Run selected command
+                          "":""     ) select_vm                 ;; #BACK button selected
         esac
     done
 
